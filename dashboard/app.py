@@ -5,11 +5,13 @@ Launch with:
     streamlit run dashboard/app.py
 """
 
+import os
 import sqlite3
 import sys
 from pathlib import Path
 
 import pandas as pd
+from dotenv import load_dotenv
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -57,14 +59,104 @@ PLOTLY_LAYOUT = dict(
 )
 
 
+def _normalize_api_key(value: str) -> str:
+    """Strip whitespace / quotes often pasted into Streamlit secrets."""
+    return value.strip().strip('"').strip("'")
+
+
+def resolve_fred_api_key() -> str | None:
+    """Prefer local `.env`, then Streamlit Cloud secrets (exact name: FRED_API_KEY)."""
+    load_dotenv(ROOT / ".env")
+    raw = os.environ.get("FRED_API_KEY")
+    if raw:
+        return _normalize_api_key(raw)
+    try:
+        if "FRED_API_KEY" in st.secrets:
+            key = _normalize_api_key(str(st.secrets["FRED_API_KEY"]))
+            os.environ["FRED_API_KEY"] = key
+            return key
+    except Exception:
+        pass
+    return None
+
+
+def database_ready() -> bool:
+    """True only if `signals` exists and has rows (avoids partial failed runs)."""
+    if not DB_PATH.exists():
+        return False
+    try:
+        with sqlite3.connect(str(DB_PATH)) as conn:
+            cur = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='signals'"
+            )
+            if cur.fetchone() is None:
+                return False
+            n = conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0]
+            return n > 0
+    except sqlite3.Error:
+        return False
+
+
 @st.cache_data(ttl=300)
 def load_signals() -> pd.DataFrame:
     if not DB_PATH.exists():
         return pd.DataFrame()
-    with sqlite3.connect(str(DB_PATH)) as conn:
-        df = pd.read_sql("SELECT * FROM signals", conn, index_col="date",
-                         parse_dates=["date"])
+    try:
+        with sqlite3.connect(str(DB_PATH)) as conn:
+            df = pd.read_sql(
+                "SELECT * FROM signals",
+                conn,
+                index_col="date",
+                parse_dates=["date"],
+            )
+    except Exception:
+        return pd.DataFrame()
     return df
+
+
+def ensure_database() -> bool:
+    """
+    Build `data/data.db` via the full pipeline when missing or broken.
+
+    Older versions wrote a partial DB (only `clean_data`) before the pipeline
+    finished — that breaks the dashboard. We delete and rebuild in that case.
+    """
+    if database_ready():
+        return True
+
+    if DB_PATH.exists():
+        try:
+            DB_PATH.unlink()
+        except OSError:
+            pass
+
+    key = resolve_fred_api_key()
+    if not key:
+        return False
+
+    os.environ["FRED_API_KEY"] = key
+
+    from main import run_pipeline
+
+    try:
+        with st.spinner(
+            "Building dataset from FRED and Yahoo Finance (first run, ~30–60s)..."
+        ):
+            run_pipeline(use_cache=False)
+    except Exception:
+        if DB_PATH.exists():
+            try:
+                DB_PATH.unlink()
+            except OSError:
+                pass
+        raise
+
+    load_signals.clear()
+    if not database_ready():
+        raise RuntimeError(
+            "Pipeline finished but `signals` is empty — check logs and data filters."
+        )
+    return True
 
 
 def load_latest_report() -> str:
@@ -78,11 +170,32 @@ def load_latest_report() -> str:
 # ── Main UI ──────────────────────────────────────────────────────────────────
 
 def main():
+    try:
+        if not database_ready():
+            if not ensure_database():
+                st.error(
+                    "**No usable database and no `FRED_API_KEY` found.**\n\n"
+                    "**Streamlit Cloud:** App settings → Secrets → add exactly:\n"
+                    "```\nFRED_API_KEY = \"your_key_here\"\n```\n"
+                    "(Name must be **`FRED_API_KEY`**, uppercase. Redeploy or clear cache "
+                    "after saving.)\n\n"
+                    "**Local:** run `python main.py` or put `FRED_API_KEY=...` in `.env`."
+                )
+                return
+    except Exception as exc:
+        st.error(
+            "The data pipeline failed while fetching or processing. "
+            "Common causes: invalid FRED key, or Yahoo Finance temporarily blocked. "
+            "See the traceback below."
+        )
+        st.exception(exc)
+
     df = load_signals()
 
     if df.empty:
         st.warning(
-            "No data found. Run `python main.py` first to populate the database."
+            "No data in `signals` table. Try **Reboot app** in Streamlit Cloud, "
+            "or run `python main.py` locally."
         )
         return
 

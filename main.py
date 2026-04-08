@@ -8,6 +8,7 @@ Usage:
 
 import argparse
 import logging
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -46,7 +47,12 @@ def save_to_db(
 
 
 def run_pipeline(use_cache: bool = True) -> None:
-    load_dotenv()
+    # So `config.yaml`, `data/`, and `.env` resolve correctly when imported from
+    # Streamlit or any working directory.
+    root = Path(__file__).resolve().parent
+    os.chdir(root)
+    load_dotenv(root / ".env")
+
     config = load_config()
 
     logger.info("=== Stage 1/5: Data Ingestion ===")

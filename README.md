@@ -62,6 +62,25 @@ streamlit run dashboard/app.py
 
 ---
 
+## Deploying the dashboard (e.g. Streamlit Community Cloud)
+
+The SQLite file `data/data.db` and generated reports under `output/` are **not** in Git (see `.gitignore`). A fresh clone or cloud deploy therefore has **no database** until something builds it.
+
+1. **Main file path:** `dashboard/app.py`
+2. **Secrets (exact name):** In **App settings → Secrets**, use TOML with the variable name **`FRED_API_KEY`** (all caps, underscores — must match what the code reads):
+
+   ```toml
+   FRED_API_KEY = "paste_your_fred_key_here"
+   ```
+
+   Save, then **Reboot app** (or wait for redeploy). First successful load may take **30–60 seconds** while FRED + Yahoo Finance are fetched.
+
+3. **If charts stay empty:** An older bug could leave a **partial** `data.db` (no `signals` table). **Reboot** the app after updating — the dashboard now detects that and rebuilds. Check **Manage app → Logs** for API errors.
+
+4. **Without a key:** the app cannot fetch FRED data until you add secrets or run `python main.py` locally.
+
+---
+
 ## What It Does
 
 | Stage | Module | Description |

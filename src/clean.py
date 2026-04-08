@@ -3,7 +3,6 @@ Data cleaning: date alignment, imputation, normalisation, and persistence.
 """
 
 import logging
-import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -54,14 +53,14 @@ def clean_data(df_raw: pd.DataFrame) -> pd.DataFrame:
 
 
 def save_processed(df: pd.DataFrame, config: dict) -> None:
-    """Write cleaned data to CSV and SQLite."""
+    """Write cleaned data to CSV only.
+
+    SQLite `data.db` is written once at the end of the pipeline in `main.save_to_db`.
+    Writing the DB here caused partial databases (only `clean_data`) if a later stage
+    failed — the dashboard then had no `signals` table.
+    """
     csv_path = Path("data/processed/clean_data.csv")
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(csv_path)
 
-    db_path = config["output"]["db_path"]
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
-        df.to_sql("clean_data", conn, if_exists="replace")
-
-    logger.info("Saved cleaned data to %s and %s", csv_path, db_path)
+    logger.info("Saved cleaned data to %s", csv_path)

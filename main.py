@@ -4,6 +4,8 @@ Fixed Income Signal Engine — pipeline orchestrator.
 Usage:
     python main.py              # full run (fetch + process + report)
     python main.py --cached     # re-run from cached data (no API calls)
+
+Not a Streamlit entry — use `streamlit_app.py` or `dashboard/app.py` for the UI.
 """
 
 import argparse
@@ -12,6 +14,10 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import yaml
 from dotenv import load_dotenv
@@ -38,11 +44,17 @@ def load_config(path: str = "config.yaml") -> dict:
 def save_to_db(
     clean_df, features_df, signals_df, db_path: str,
 ) -> None:
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
-        clean_df.to_sql("clean_data", conn, if_exists="replace")
-        features_df.to_sql("features", conn, if_exists="replace")
-        signals_df.to_sql("signals", conn, if_exists="replace")
+    """Atomic-ish refresh: drop old tables first (avoids races / 'already exists')."""
+    p = Path(db_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(str(p), timeout=60) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        for name in ("signals", "features", "clean_data"):
+            conn.execute(f"DROP TABLE IF EXISTS {name}")
+        conn.commit()
+        clean_df.to_sql("clean_data", conn, if_exists="replace", index=True)
+        features_df.to_sql("features", conn, if_exists="replace", index=True)
+        signals_df.to_sql("signals", conn, if_exists="replace", index=True)
     logger.info("All tables written to %s", db_path)
 
 

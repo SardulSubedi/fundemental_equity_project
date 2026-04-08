@@ -136,13 +136,18 @@ def ensure_database() -> bool:
 
     os.environ["FRED_API_KEY"] = key
 
+    from filelock import FileLock
     from main import run_pipeline
+
+    lock_path = ROOT / "data" / ".pipeline.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         with st.spinner(
             "Building dataset from FRED and Yahoo Finance (first run, ~30–60s)..."
         ):
-            run_pipeline(use_cache=False)
+            with FileLock(str(lock_path), timeout=600):
+                run_pipeline(use_cache=False)
     except Exception:
         if DB_PATH.exists():
             try:

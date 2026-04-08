@@ -16,6 +16,17 @@ from fredapi import Fred
 
 logger = logging.getLogger(__name__)
 
+# Isolated tz cache per process — avoids yfinance/peewee "database is locked" when
+# Streamlit Cloud runs several workers or overlapping downloads.
+try:
+    import tempfile
+
+    _yf_cache = Path(tempfile.gettempdir()) / "py-yfinance-fies" / str(os.getpid())
+    _yf_cache.mkdir(parents=True, exist_ok=True)
+    yf.set_tz_cache_location(str(_yf_cache))
+except Exception:  # pragma: no cover
+    pass
+
 MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds
 

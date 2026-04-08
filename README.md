@@ -57,7 +57,8 @@ cp .env.example .env
 python main.py
 
 # 5. Launch the dashboard
-streamlit run dashboard/app.py
+streamlit run streamlit_app.py
+# or: streamlit run dashboard/app.py
 ```
 
 ---
@@ -66,7 +67,11 @@ streamlit run dashboard/app.py
 
 The SQLite file `data/data.db` and generated reports under `output/` are **not** in Git (see `.gitignore`). A fresh clone or cloud deploy therefore has **no database** until something builds it.
 
-1. **Main file path:** `dashboard/app.py`
+**Critical:** In Streamlit Community Cloud, the **Main file path** must be the UI entry — **`streamlit_app.py` (recommended)** or **`dashboard/app.py`**.
+
+**Do not** set it to **`main.py`**. That file is only the CLI batch pipeline; Streamlit will try to run it as an app and you can get import errors (e.g. `KeyError: 'src.clean'`) or a broken page.
+
+1. **Main file path:** `streamlit_app.py` (or `dashboard/app.py`)
 2. **Secrets (exact name):** In **App settings → Secrets**, use TOML with the variable name **`FRED_API_KEY`** (all caps, underscores — must match what the code reads):
 
    ```toml

@@ -2,6 +2,7 @@
 data/raw/
 data/processed/
 data/*.db
+data/.pipeline.lock
 
 # Generated output
 output/

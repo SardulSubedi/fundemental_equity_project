@@ -1,0 +1,28 @@
+# Data artifacts
+data/raw/
+data/processed/
+data/*.db
+
+# Generated output
+output/
+
+# Environment
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent / skill config (keep skills-lock.json tracked)
+.agents/
+.cursor/
+agent-transcripts/
